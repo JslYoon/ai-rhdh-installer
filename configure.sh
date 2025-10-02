@@ -45,6 +45,28 @@ export REMOTE_K8S_AUTH_PROVIDER=${REMOTE_K8S_AUTH_PROVIDER:-'serviceAccount'}
 # Skipped optional variables
 export BYPASS_OPTIONAL_INPUT=''
 
+read_secret_eot() {
+    local __out_var_name="$1"
+    local __prompt="$2"
+    local __input=""
+    local __oldstty
+    if [ -n "$__prompt" ]; then
+        printf "%s" "$__prompt"
+    fi
+    __oldstty="$(stty -g 2>/dev/null)"
+    if stty -icanon -echo 2>/dev/null; then
+        IFS= read -r -d $'\04' __input
+        stty "$__oldstty" 2>/dev/null
+        echo ""
+    else
+        echo ""
+        __input="$(cat)"
+    fi
+    __input="${__input//$'\r'/}"
+    __input="${__input//$'\n'/}"
+    printf -v "$__out_var_name" '%s' "$__input"
+}
+
 signin_provider=''
 # Reads GitHub secrets if enabling GitHub integration
 if [[ $RHDH_GITHUB_INTEGRATION == "true" ]]; then
@@ -101,7 +123,7 @@ if [[ $RHDH_GITHUB_INTEGRATION == "true" ]]; then
 
     # Reads Git PAT
     until [ ! -z "${GITOPS__GIT_TOKEN}" ]; do
-        read -p "Enter your Git Token: " GITOPS__GIT_TOKEN
+        read_secret_eot GITOPS__GIT_TOKEN "Enter your Git Token (Paste then press CTRL-D when done): "
         if [ -z "${GITOPS__GIT_TOKEN}" ]; then
             echo "No Git Token entered, try again."
         fi
@@ -128,7 +150,7 @@ if [[ $RHDH_GITLAB_INTEGRATION == "true" ]]; then
 
     # Reads GitLab PAT
     until [ ! -z "${GITLAB__TOKEN}" ]; do
-        read -p "Enter your GitLab Token: " GITLAB__TOKEN
+        read_secret_eot GITLAB__TOKEN "Enter your GitLab Token (Paste then press CTRL-D when done): "
         if [ -z "${GITLAB__TOKEN}" ]; then
             echo "No GitLab Token entered, try again."
         fi
@@ -206,8 +228,10 @@ fi
 # Reads Quay API Token
 # Optional: If an API Token is not entered, there will be none provided to the developer hub app config
 if [ -z "${QUAY__API_TOKEN}" ]; then
-    read -p "Enter your Quay API Token (Optional): " QUAY__API_TOKEN
-    BYPASS_OPTIONAL_INPUT+=",QUAY__API_TOKEN"
+    read_secret_eot QUAY__API_TOKEN "Enter your Quay API Token (Optional|Paste then press CTRL-D when done): "
+    if [ -z "${QUAY__API_TOKEN}" ]; then
+        BYPASS_OPTIONAL_INPUT+=",QUAY__API_TOKEN"
+    fi
 fi
 
 # Reads Quay DockerConfig JSON
@@ -253,7 +277,7 @@ if [[ "${setup_remote_clusters}" == "true" ]]; then
 		
 		# Ask for service account token
 		while [ -z "${cluster_token}" ]; do
-			read -p "Enter remote cluster service account token: " cluster_token
+			read_secret_eot cluster_token "Enter remote cluster service account token (Paste then press CTRL-D when done): "
 			if [ -z "${cluster_token}" ]; then
 				echo "Service account token is required, try again."
 			fi
